@@ -20,7 +20,7 @@ def fetch_permits():
                                         def classify(row):
                                                 text = str(row.get('work_desc', '')) + ' ' + str(row.get('permit_type', ''))
                                                         text = text.upper()
-                                                                
+
                                                                         if 'ADU' in text or 'ACCESSORY DWELLING' in text:
                                                                                     return 'ADU'
                                                                                             elif 'SOLAR' in text or 'PV' in text or 'PHOTOVOLTAIC' in text:
@@ -38,13 +38,13 @@ def fetch_permits():
                                                                                                                                                                                                                                                                         except (ValueError, TypeError):
                                                                                                                                                                                                                                                                                             pass
                                                                                                                                                                                                                                                                                                         return 'Other'
-                                                                                                                                                                                                                                                                                                            
+
                                                                                                                                                                                                                                                                                                                 df['vertical'] = df.apply(classify, axis=1)
-                                                                                                                                                                                                                                                                                                                    
+
                                                                                                                                                                                                                                                                                                                         # Convert date columns if they exist
                                                                                                                                                                                                                                                                                                                             if 'issue_date' in df.columns:
                                                                                                                                                                                                                                                                                                                                     df['issue_date'] = pd.to_datetime(df['issue_date'], errors='coerce')
-                                                                                                                                                                                                                                                                                                                                        
+
                                                                                                                                                                                                                                                                                                                                             return df
 
                                                                                                                                                                                                                                                                                                                                             # Load and classify data
