@@ -18,24 +18,17 @@ def fetch_permits():
 @st.cache_data(ttl=3600)
 def classify_permits(df):
     def classify(row):
-        # Combine relevant text fields
         work = str(row.get('work_desc', ''))
         permit_type = str(row.get('permit_type', ''))
         text = (work + ' ' + permit_type).upper()
-        
-        # ADU detection
+
         if 'ADU' in text or 'ACCESSORY DWELLING' in text:
             return 'ADU'
-        
-        # Solar detection
         if 'SOLAR' in text or 'PV' in text or 'PHOTOVOLTAIC' in text:
             return 'Solar + Storage'
-        
-        # EV Charging detection
         if 'EV' in text or 'CHARGING' in text or 'ELECTRIC VEHICLE' in text:
             return 'EV Charging'
-        
-        # Small Multifamily (5-50 units)
+
         du_value = row.get('du_changed', 0)
         if du_value:
             try:
@@ -44,24 +37,19 @@ def classify_permits(df):
                     return 'Small Multifamily'
             except (ValueError, TypeError):
                 pass
-        
         return 'Other'
-    
+
     df['vertical'] = df.apply(classify, axis=1)
-    
-    # Convert date column if it exists
+
     if 'issue_date' in df.columns:
         df['issue_date'] = pd.to_datetime(df['issue_date'], errors='coerce')
-    
     return df
 
-# Load and classify data
 df = fetch_permits()
 df = classify_permits(df)
 
 st.success(f"✅ Loaded {len(df):,} permits")
 
-# Metrics
 col1, col2, col3, col4, col5 = st.columns(5)
 total = len(df)
 adu = len(df[df['vertical'] == 'ADU'])
@@ -75,12 +63,10 @@ col3.metric("Solar + Storage", f"{solar:,}")
 col4.metric("EV Charging", f"{ev:,}")
 col5.metric("Small Multifamily", f"{multi:,}")
 
-# Pie chart
 if total > 0:
     fig = px.pie(df, names='vertical', title='Permits by Vertical', hole=0.4)
     st.plotly_chart(fig, use_container_width=True)
 
-# Sample permits
 st.subheader("Sample Permits by Vertical")
 for vert in ['ADU', 'Solar + Storage', 'EV Charging', 'Small Multifamily']:
     subset = df[df['vertical'] == vert].head(5)
@@ -88,22 +74,8 @@ for vert in ['ADU', 'Solar + Storage', 'EV Charging', 'Small Multifamily']:
         with st.expander(f"{vert} ({len(subset)} samples)"):
             st.dataframe(subset[['permit_nbr', 'primary_address', 'valuation']])
 
-# Download button
 csv = df.to_csv(index=False).encode('utf-8')
-st.download_button("📥 Download Full CSV", csv, "permits_export.csv", "text/csv")        monthly_avg_valuation = df_filtered.groupby('year_month')['valuation'].apply(lambda x: pd.to_numeric(x, errors='coerce').mean()).reset_index()
-        monthly_avg_valuation['year_month'] = monthly_avg_valuation['year_month'].astype(str)
-        st.dataframe(monthly_avg_valuation.rename(columns={'valuation': 'Average Valuation'}))
-    else:
-        st.write("No data to calculate monthly average valuation.")
-
-    st.subheader("Permit Locations")
-    # Filter out rows with missing lat/lon for mapping
-    df_map_data = df_filtered.dropna(subset=['latitude', 'longitude'])
-
-    if not df_map_data.empty:
-        fig_map = px.scatter_mapbox(
-            df_map_data,
-            lat="latitude",
+st.download_button("📥 Download Full CSV", csv, "permits_export.csv", "text/csv")            lat="latitude",
             lon="longitude",
             color="vertical", # Color points by vertical classification
             hover_name="primary_address",
