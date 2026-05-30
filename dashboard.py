@@ -1,106 +1,96 @@
-
+# LA Permit Dashboard - Clean Working Version
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from sodapy import Socrata
-from datetime import datetime
 
 st.set_page_config(page_title="LA Permit Forecaster", layout="wide")
 st.title("🏛️ LA Building Permit Forecaster")
 
 @st.cache_data(ttl=3600)
 def fetch_permits():
-    client = Socrata("data.lacity.org", None)
-    data = client.get("n3xg-rixm", limit=20000)
-    client.close()
-    return pd.DataFrame(data)
+    with st.spinner("Fetching permits from LA City API..."):
+        client = Socrata("data.lacity.org", None)
+        data = client.get("n3xg-rixm", limit=20000)
+        client.close()
+        return pd.DataFrame(data)
 
 @st.cache_data(ttl=3600)
 def classify_permits(df):
     def classify(row):
-        text = str(row.get('work_desc', '')) + ' ' + str(row.get('permit_type', ''))
-        text = text.upper()
+        # Combine relevant text fields
+        work = str(row.get('work_desc', ''))
+        permit_type = str(row.get('permit_type', ''))
+        text = (work + ' ' + permit_type).upper()
+        
+        # ADU detection
         if 'ADU' in text or 'ACCESSORY DWELLING' in text:
             return 'ADU'
-        elif 'SOLAR' in text or 'PV' in text:
+        
+        # Solar detection
+        if 'SOLAR' in text or 'PV' in text or 'PHOTOVOLTAIC' in text:
             return 'Solar + Storage'
-        elif 'EV' in text or 'CHARGING' in text:
+        
+        # EV Charging detection
+        if 'EV' in text or 'CHARGING' in text or 'ELECTRIC VEHICLE' in text:
             return 'EV Charging'
-        elif row.get('du_changed', 0) and 5 <= int(row.get('du_changed', 0)) <= 50:
-            return 'Small Multifamily'
-        else:
-            return 'Other'
+        
+        # Small Multifamily (5-50 units)
+        du_value = row.get('du_changed', 0)
+        if du_value:
+            try:
+                du_int = int(float(du_value))
+                if 5 <= du_int <= 50:
+                    return 'Small Multifamily'
+            except (ValueError, TypeError):
+                pass
+        
+        return 'Other'
+    
     df['vertical'] = df.apply(classify, axis=1)
+    
+    # Convert date column if it exists
     if 'issue_date' in df.columns:
-        df['issue_date'] = pd.to_datetime(df['issue_date'], errors='coerce') # Use errors='coerce' for robustness
-    # Convert latitude and longitude to numeric for mapping
-    if 'latitude' in df.columns:
-        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
-    if 'longitude' in df.columns:
-        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        df['issue_date'] = pd.to_datetime(df['issue_date'], errors='coerce')
+    
     return df
 
-with st.spinner("Fetching permits..."):
-    df = fetch_permits()
-    df = classify_permits(df)
+# Load and classify data
+df = fetch_permits()
+df = classify_permits(df)
 
-# Handle potential empty issue_date column or NaTs for min/max date input default values
-if 'issue_date' in df.columns and not df['issue_date'].empty and not df['issue_date'].isnull().all():
-    min_date_val = df['issue_date'].min().date()
-    max_date_val = df['issue_date'].max().date()
-else:
-    # Provide sensible defaults if no valid dates are present
-    min_date_val = datetime(2020, 1, 1).date() # Example default start
-    max_date_val = datetime.now().date()      # Example default end
+st.success(f"✅ Loaded {len(df):,} permits")
 
-st.success(f"✅ {len(df)} permits initially loaded.")
+# Metrics
+col1, col2, col3, col4, col5 = st.columns(5)
+total = len(df)
+adu = len(df[df['vertical'] == 'ADU'])
+solar = len(df[df['vertical'] == 'Solar + Storage'])
+ev = len(df[df['vertical'] == 'EV Charging'])
+multi = len(df[df['vertical'] == 'Small Multifamily'])
 
-st.markdown("--- # Filters ---")
+col1.metric("Total Permits", f"{total:,}")
+col2.metric("ADU", f"{adu:,}")
+col3.metric("Solar + Storage", f"{solar:,}")
+col4.metric("EV Charging", f"{ev:,}")
+col5.metric("Small Multifamily", f"{multi:,}")
 
-st.subheader("Filter by Date Range")
-col_start_date, col_end_date = st.columns(2)
-with col_start_date:
-    start_date_filter = st.date_input("Start Date", value=min_date_val, min_value=min_date_val, max_value=max_date_val)
-with col_end_date:
-    end_date_filter = st.date_input("End Date", value=max_date_val, min_value=min_date_val, max_value=max_date_val)
-
-# Convert selected dates to datetime for filtering
-start_date_dt = pd.to_datetime(start_date_filter)
-end_date_dt = pd.to_datetime(end_date_filter)
-
-# Apply the date filter
-df_filtered = df[(df['issue_date'] >= start_date_dt) & (df['issue_date'] <= end_date_dt)]
-
-st.info(f"Displaying {len(df_filtered)} permits within the selected date range.")
-
-# --- New Search Bar ---
-search_query = st.text_input("Search by Address or Permit Number", "")
-if search_query:
-    df_filtered = df_filtered[
-        df_filtered['primary_address'].astype(str).str.contains(search_query, case=False, na=False) |
-        df_filtered['permit_nbr'].astype(str).str.contains(search_query, case=False, na=False)
-    ]
-    st.info(f"Displaying {len(df_filtered)} permits matching your search query.")
-
-tab1, tab2 = st.tabs(["📊 Overview", "🏡 Verticals"])
-
-with tab1:
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Permits", f"{len(df_filtered):,}")
-    col2.metric("ADU", f"{len(df_filtered[df_filtered['vertical'] == 'ADU']):,}")
-    col3.metric("Solar", f"{len(df_filtered[df_filtered['vertical'] == 'Solar + Storage']):,}")
-    col4.metric("EV Charging", f"{len(df_filtered[df_filtered['vertical'] == 'EV Charging']):,}")
-
-    fig = px.pie(df_filtered, names='vertical', title='Permits by Vertical', hole=0.4)
+# Pie chart
+if total > 0:
+    fig = px.pie(df, names='vertical', title='Permits by Vertical', hole=0.4)
     st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Summary Statistics")
-    st.dataframe(df_filtered.describe())
+# Sample permits
+st.subheader("Sample Permits by Vertical")
+for vert in ['ADU', 'Solar + Storage', 'EV Charging', 'Small Multifamily']:
+    subset = df[df['vertical'] == vert].head(5)
+    if len(subset) > 0:
+        with st.expander(f"{vert} ({len(subset)} samples)"):
+            st.dataframe(subset[['permit_nbr', 'primary_address', 'valuation']])
 
-    st.subheader("Average Monthly Valuation")
-    if not df_filtered.empty and 'issue_date' in df_filtered.columns and 'valuation' in df_filtered.columns:
-        df_filtered['year_month'] = df_filtered['issue_date'].dt.to_period('M')
-        monthly_avg_valuation = df_filtered.groupby('year_month')['valuation'].apply(lambda x: pd.to_numeric(x, errors='coerce').mean()).reset_index()
+# Download button
+csv = df.to_csv(index=False).encode('utf-8')
+st.download_button("📥 Download Full CSV", csv, "permits_export.csv", "text/csv")        monthly_avg_valuation = df_filtered.groupby('year_month')['valuation'].apply(lambda x: pd.to_numeric(x, errors='coerce').mean()).reset_index()
         monthly_avg_valuation['year_month'] = monthly_avg_valuation['year_month'].astype(str)
         st.dataframe(monthly_avg_valuation.rename(columns={'valuation': 'Average Valuation'}))
     else:
