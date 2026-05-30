@@ -1,4 +1,4 @@
-
+# LA Permit Dashboard - Ultra Clean Version
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -9,76 +9,62 @@ st.title("🏛️ LA Building Permit Forecaster")
 
 @st.cache_data(ttl=3600)
 def fetch_permits():
-    with st.spinner("Fetching permits from LA City API..."):
-            client = Socrata("data.lacity.org", None)
-                    data = client.get("n3xg-rixm", limit=20000)
-                            client.close()
-                                    return pd.DataFrame(data)
+    client = Socrata("data.lacity.org", None)
+    data = client.get("n3xg-rixm", limit=20000)
+    client.close()
+    return pd.DataFrame(data)
 
-                                    @st.cache_data(ttl=3600)
-                                    def classify_permits(df):
-                                        def classify(row):
-                                                text = str(row.get('work_desc', '')) + ' ' + str(row.get('permit_type', ''))
-                                                        text = text.upper()
+@st.cache_data(ttl=3600)
+def classify_permits(df):
+    results = []
+    for i in range(len(df)):
+        row = df.iloc[i]
+        work = str(row.get('work_desc', ''))
+        ptype = str(row.get('permit_type', ''))
+        text = (work + ' ' + ptype).upper()
+        
+        if 'ADU' in text or 'ACCESSORY DWELLING' in text:
+            results.append('ADU')
+        elif 'SOLAR' in text or 'PV' in text:
+            results.append('Solar + Storage')
+        elif 'EV' in text or 'CHARGING' in text:
+            results.append('EV Charging')
+        else:
+            du = row.get('du_changed', 0)
+            if du:
+                try:
+                    du_int = int(float(du))
+                    if 5 <= du_int <= 50:
+                        results.append('Small Multifamily')
+                    else:
+                        results.append('Other')
+                except:
+                    results.append('Other')
+            else:
+                results.append('Other')
+    
+    df['vertical'] = results
+    return df
 
-                                                                        if 'ADU' in text or 'ACCESSORY DWELLING' in text:
-                                                                                    return 'ADU'
-                                                                                            elif 'SOLAR' in text or 'PV' in text or 'PHOTOVOLTAIC' in text:
-                                                                                                        return 'Solar + Storage'
-                                                                                                                elif 'EV' in text or 'CHARGING' in text or 'ELECTRIC VEHICLE' in text:
-                                                                                                                            return 'EV Charging'
-                                                                                                                                    else:
-                                                                                                                                                # Safely handle du_changed (could be string, None, or empty)
-                                                                                                                                                            du_value = row.get('du_changed', 0)
-                                                                                                                                                                        if du_value:
-                                                                                                                                                                                        try:
-                                                                                                                                                                                                            du_int = int(float(du_value))
-                                                                                                                                                                                                                                if 5 <= du_int <= 50:
-                                                                                                                                                                                                                                                        return 'Small Multifamily'
-                                                                                                                                                                                                                                                                        except (ValueError, TypeError):
-                                                                                                                                                                                                                                                                                            pass
-                                                                                                                                                                                                                                                                                                        return 'Other'
+df = fetch_permits()
+df = classify_permits(df)
 
-                                                                                                                                                                                                                                                                                                                df['vertical'] = df.apply(classify, axis=1)
+st.success(f"Loaded {len(df):,} permits")
 
-                                                                                                                                                                                                                                                                                                                        # Convert date columns if they exist
-                                                                                                                                                                                                                                                                                                                            if 'issue_date' in df.columns:
-                                                                                                                                                                                                                                                                                                                                    df['issue_date'] = pd.to_datetime(df['issue_date'], errors='coerce')
+# Metrics
+col1, col2, col3, col4, col5 = st.columns(5)
+total = len(df)
+col1.metric("Total Permits", f"{total:,}")
+col2.metric("ADU", f"{len(df[df['vertical'] == 'ADU']):,}")
+col3.metric("Solar", f"{len(df[df['vertical'] == 'Solar + Storage']):,}")
+col4.metric("EV Charging", f"{len(df[df['vertical'] == 'EV Charging']):,}")
+col5.metric("Small Multi", f"{len(df[df['vertical'] == 'Small Multifamily']):,}")
 
-                                                                                                                                                                                                                                                                                                                                            return df
+# Pie chart
+if total > 0:
+    fig = px.pie(df, names='vertical', title='Permits by Vertical', hole=0.4)
+    st.plotly_chart(fig, use_container_width=True)
 
-                                                                                                                                                                                                                                                                                                                                            # Load and classify data
-                                                                                                                                                                                                                                                                                                                                            df = fetch_permits()
-                                                                                                                                                                                                                                                                                                                                            df = classify_permits(df)
-
-                                                                                                                                                                                                                                                                                                                                            st.success(f"✅ Loaded {len(df):,} permits")
-
-                                                                                                                                                                                                                                                                                                                                            # Metrics
-                                                                                                                                                                                                                                                                                                                                            col1, col2, col3, col4, col5 = st.columns(5)
-                                                                                                                                                                                                                                                                                                                                            total = len(df)
-                                                                                                                                                                                                                                                                                                                                            adu = len(df[df['vertical'] == 'ADU'])
-                                                                                                                                                                                                                                                                                                                                            solar = len(df[df['vertical'] == 'Solar + Storage'])
-                                                                                                                                                                                                                                                                                                                                            ev = len(df[df['vertical'] == 'EV Charging'])
-                                                                                                                                                                                                                                                                                                                                            multi = len(df[df['vertical'] == 'Small Multifamily'])
-
-                                                                                                                                                                                                                                                                                                                                            col1.metric("Total Permits", f"{total:,}")
-                                                                                                                                                                                                                                                                                                                                            col2.metric("ADU", f"{adu:,}", delta=f"{adu/total*100:.1f}%" if total > 0 else "0%")
-                                                                                                                                                                                                                                                                                                                                            col3.metric("Solar + Storage", f"{solar:,}", delta=f"{solar/total*100:.1f}%" if total > 0 else "0%")
-                                                                                                                                                                                                                                                                                                                                            col4.metric("EV Charging", f"{ev:,}", delta=f"{ev/total*100:.1f}%" if total > 0 else "0%")
-                                                                                                                                                                                                                                                                                                                                            col5.metric("Small Multifamily", f"{multi:,}", delta=f"{multi/total*100:.1f}%" if total > 0 else "0%")
-
-                                                                                                                                                                                                                                                                                                                                            # Pie chart
-                                                                                                                                                                                                                                                                                                                                            fig = px.pie(df, names='vertical', title='Permits by Vertical', hole=0.4)
-                                                                                                                                                                                                                                                                                                                                            st.plotly_chart(fig, use_container_width=True)
-
-                                                                                                                                                                                                                                                                                                                                            # Sample data
-                                                                                                                                                                                                                                                                                                                                            st.subheader("Sample Permits by Vertical")
-                                                                                                                                                                                                                                                                                                                                            for vert in ['ADU', 'Solar + Storage', 'EV Charging', 'Small Multifamily']:
-                                                                                                                                                                                                                                                                                                                                                subset = df[df['vertical'] == vert].head(5)
-                                                                                                                                                                                                                                                                                                                                                    if len(subset) > 0:
-                                                                                                                                                                                                                                                                                                                                                            st.write(f"**{vert}**")
-                                                                                                                                                                                                                                                                                                                                                                    st.dataframe(subset[['permit_nbr', 'primary_address', 'valuation']].head(3))
-
-                                                                                                                                                                                                                                                                                                                                                                    # Download button
-                                                                                                                                                                                                                                                                                                                                                                    csv = df.to_csv(index=False).encode('utf-8')
-                                                                                                                                                                                                                                                                                                                                                                    st.download_button("📥 Download Full CSV", csv, "permits_export.csv", "text/csv")
+# Download
+csv = df.to_csv(index=False).encode('utf-8')
+st.download_button("Download CSV", csv, "permits.csv", "text/csv")
