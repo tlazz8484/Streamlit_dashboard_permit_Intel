@@ -74,3 +74,37 @@ def check_for_alerts():
 
 if __name__ == "__main__":
     check_for_alerts()
+# Add at the bottom of keyword_search.py
+import smtplib
+from email.mime.text import MIMEText
+
+def send_alert_email(alerts):
+    if not alerts:
+        return
+    
+    # For GitHub Actions, use secrets for email credentials
+    sender = os.environ.get('ALERT_EMAIL')
+    password = os.environ.get('ALERT_EMAIL_PASSWORD')
+    recipient = os.environ.get('ALERT_RECIPIENT')
+    
+    if not sender:
+        print("⚠️ Email not configured - skipping")
+        return
+    
+    body = "New Policy Alerts:\n\n"
+    for a in alerts:
+        body += f"• {a['keyword']} found at {a['source']}\n  {a['url']}\n"
+    
+    msg = MIMEText(body)
+    msg['Subject'] = f"Policy Alert: {len(alerts)} new keywords"
+    msg['From'] = sender
+    msg['To'] = recipient
+    
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(sender, password)
+            server.send_message(msg)
+        print("📧 Email alert sent")
+    except:
+        print("⚠️ Email send failed")
