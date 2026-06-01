@@ -24,4 +24,5 @@ jobs:
           git add data/
           git diff --quiet && git diff --staged --quiet || git commit -m "Daily fetch $(date +'%Y-%m-%d')"
           git push
+
           
