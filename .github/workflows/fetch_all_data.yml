@@ -1,0 +1,25 @@
+name: Daily Permit Fetch
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests pandas
+      - run: python scripts/fetch_permits.py
+      - run: python scripts/keyword_search.py
+      - name: Commit
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add data/
+          git commit -m "Auto update" || echo "No changes"
+          git push
