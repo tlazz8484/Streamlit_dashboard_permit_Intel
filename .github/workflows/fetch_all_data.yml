@@ -10,16 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install requests pandas
-      - run: python scripts/fetch_permits.py
-      - run: python scripts/keyword_search.py
-      - name: Commit
+      
+      - name: Install dependencies
+        run: pip install requests pandas beautifulsoup4 streamlit
+      
+      - name: Run permit fetcher
+        run: python dashboard.py
+      
+      - name: Commit any new data
         run: |
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
-          git add data/
-          git commit -m "Auto update" || echo "No changes"
-          git push
+          git add data/ || true
+          git diff --quiet && git diff --staged --quiet || git commit -m "Auto update $(date +'%Y-%m-%d')"
+          git push || true
