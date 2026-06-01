@@ -19,3 +19,4 @@ This repository contains a Streamlit dashboard for analyzing LA building permits
 Data is fetched from the [LA City Open Data Portal](https://data.lacity.org/)
 specifically the [Building and Safety Permit Information](https://data.lacity.org/Government/Building-and-Safety-Permit-Information/n3xg-rixm) dataset.
 
+
