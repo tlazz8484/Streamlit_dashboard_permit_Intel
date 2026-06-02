@@ -1,4 +1,4 @@
-```python
+
 # LA Permit Dashboard - Full Version with Policy Indicators
 import streamlit as st
 import pandas as pd
@@ -101,5 +101,4 @@ if alert_files:
 # Download button
 csv = df.to_csv(index=False).encode('utf-8')
 st.download_button("📥 Download CSV", csv, "permits.csv", "text/csv")
-```
     
