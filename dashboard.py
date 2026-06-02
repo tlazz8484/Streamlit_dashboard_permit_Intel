@@ -41,3 +41,5 @@ if not df.empty:
     col2.metric("Solar Permits", solar_count)
     
     st.dataframe(df[["permit_type", "work_description", "category"]].head(100))
+
+
