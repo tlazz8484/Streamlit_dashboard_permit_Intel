@@ -6,8 +6,8 @@ from sodapy import Socrata
 print("Initializing Socrata client for data.lacity.org...")
 client = Socrata("data.lacity.org", None)
 
-# Update to the main master endpoint for LA Building & Safety permits
-dataset_id = "yv23-pmwf" 
+# Publicly accessible 2020 - Present LA City Permits dataset
+dataset_id = "pi9x-tg5x" 
 print(f"Fetching latest records from dataset: {dataset_id}...")
 
 try:
