@@ -1,4 +1,4 @@
-name: Daily Permit Fetch
+name: Full Data Fetch
 
 on:
   schedule:
@@ -6,25 +6,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  fetch:
+  fetch-all:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write          # <-- ADD THIS LINE
     steps:
       - uses: actions/checkout@v4
-      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
-      - name: Install dependencies
-        run: pip install pandas sodapy
-      
-      - name: Run Data Fetcher
-        run: python fetch_data.py  # <--- CHANGED THIS: Runs the backend script instead of dashboard.py
-      
-      - name: Commit any new data
+      - run: pip install sodapy pandas requests
+      - run: python scripts/fetch_permits.py
+      - run: python scripts/fetch_zoning.py
+      - run: python scripts/keyword_search.py
+      - name: Commit and push
         run: |
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
-          git add data/permits.csv
-          git diff --quiet && git diff --staged --quiet || git commit -m "Auto update $(date +'%Y-%m-%d')"
-          git push || true
+          git add data/
+          git diff --quiet && git diff --staged --quiet || git commit -m "Daily fetch $(date +'%Y-%m-%d')"
+          git push
