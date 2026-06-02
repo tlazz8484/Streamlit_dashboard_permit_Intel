@@ -1,51 +1,56 @@
-# fetch_data.py
-import os
+# dashboard.py
+import streamlit as st
 import pandas as pd
-from sodapy import Socrata
+import plotly.express as px
 
-print("Initializing Socrata client for data.lacity.org...")
-# We use None for the app_token since we are fetching a public dataset, 
-# but it will use the correct dataset endpoint ID.
-client = Socrata("data.lacity.org", None)
+st.set_page_config(
+    page_title="LA Building Permit Forecaster",
+    layout="wide"
+)
 
-# Updated, active LA City Permit Dataset ID
-dataset_id = "6ffd-by7r" 
-print(f"Fetching latest records from dataset: {dataset_id}...")
+st.title("LA Building Permit Forecaster")
+st.markdown("Daily automated monitoring of urban development tracking metrics across Los Angeles.")
 
-try:
-    # Pulling 20,000 records cleanly
-    data = client.get(dataset_id, limit=20000)
-    df = pd.DataFrame(data)
-    print(f"Successfully retrieved {len(df)} rows.")
+@st.cache_data(ttl=3600)
+def load_cached_permits():
+    try:
+        # Reads the static CSV file updated daily by GitHub Actions
+        return pd.read_csv("data/permits.csv")
+    except FileNotFoundError:
+        st.error("⚠️ Data cache file not found at `data/permits.csv`.")
+        st.info("Please run your 'Daily Permit Fetch' GitHub Action to generate this data file.")
+        return pd.DataFrame()
+
+df = load_cached_permits()
+
+if not df.empty:
+    st.success(f"📈 Total active tracking records loaded from GitHub cache: {len(df):,}")
     
-    # Classification Logic
-    def classify_permit(row):
-        work_desc = str(row.get("work_description", ""))
-        permit_type = str(row.get("permit_type", ""))
-        text = (work_desc + " " + permit_type).upper()
+    # Calculate metrics from the pre-classified data
+    adu_count = len(df[df["category"] == "ADU"])
+    solar_count = len(df[df["category"] == "Solar + Storage"])
+    ev_count = len(df[df["category"] == "EV Charging"])
+    
+    # Layout KPI Blocks
+    m1, m2, m3 = st.columns(3)
+    m1.metric(label="ADU Permits", value=f"{adu_count:,}")
+    m2.metric(label="Solar + Storage Permits", value=f"{solar_count:,}")
+    m3.metric(label="EV Charging Stations", value=f"{ev_count:,}")
+    
+    st.divider()
+    
+    # Visual Layout Split
+    col_chart, col_table = st.columns([1, 1])
+    
+    with col_chart:
+        st.subheader("Permit Category Distribution")
+        category_counts = df["category"].value_counts().reset_index()
+        category_counts.columns = ["Category", "Count"]
+        fig = px.pie(category_counts, values="Count", names="Category", hole=0.4)
+        st.plotly_chart(fig, use_container_width=True)
         
-        if "ADU" in text or "ACCESSORY DWELLING" in text:
-            return "ADU"
-        if "SOLAR" in text or "PV" in text or "PHOTOVOLTAIC" in text:
-            return "Solar + Storage"
-        if "EV" in text or "CHARGE" in text or "ELECTRIC VEHICLE" in text:
-            return "EV Charging"
-        return "Other"
-
-    if not df.empty:
-        df["category"] = df.apply(classify_permit, axis=1)
-        
-        # Ensure the target 'data' directory exists for the GitHub runner
-        os.makedirs("data", exist_ok=True)
-        
-        # Save out to a local repository CSV file
-        df.to_csv("data/permits.csv", index=False)
-        print("Data processed and written successfully to data/permits.csv")
-    else:
-        print("Warning: Retrieved dataset was empty.")
-
-except Exception as e:
-    print(f"An error occurred during execution: {e}")
-    raise e
-finally:
-    client.close()
+    with col_table:
+        st.subheader("Recent Permit Logs Preview")
+        st.dataframe(df[["permit_type", "work_description", "category"]].head(100), use_container_width=True)
+else:
+    st.warning("Dashboard visualization components are offline until a valid dataset source is provided.")
