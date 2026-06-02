@@ -1,37 +1,24 @@
-name: Full Data Fetch (Permits - Zoning - Policy)
+name: Daily Permit Fetch
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 8 * * *'
   workflow_dispatch:
 
 jobs:
-  fetch-all:
+  fetch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: master
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       
       - name: Install dependencies
-        run: pip install requests pandas beautifulsoup4
+        run: pip install streamlit pandas plotly sodapy
       
-      - name: Fetch permits
-        run: python scripts/fetch_permits.py
-      
-      - name: Fetch zoning
-        run: python scripts/fetch_zoning.py
-      
-      - name: Keyword search
-        run: python scripts/keyword_search.py
-      
-      - name: Commit and push
-        run: |
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
-          git add data/
-          git diff --quiet && git diff --staged --quiet || git commit -m "Daily fetch $(date +'%Y-%m-%d')"
-          git push
+      - name: Run dashboard
+        run: python dashboard.py
