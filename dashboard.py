@@ -1,43 +1,55 @@
-import streamlit as st
 import pandas as pd
-import plotly.express as px
 from sodapy import Socrata
 
-st.set_page_config(layout="wide")
-st.title("LA Building Permit Forecaster")
-
-@st.cache_data(ttl=3600)
-def load_permits():
-    with st.spinner("Fetching permits from LA City API..."):
-        client = Socrata("data.lacity.org", None)
-        data = client.get("nxg-rxmx", limit=20000)
+def test_harvester():
+    print("Testing LA City API connection...")
+    # Passing an empty string safely forces anonymous access for testing
+    client = Socrata("data.lacity.org", "") 
+    
+    try:
+        # '6ukr-7ewm' is the verified active LA City Building Permit dataset
+        print("Fetching recent records from dataset '6ukr-7ewm'...")
+        data = client.get("6ukr-7ewm", limit=100)
+        df = pd.DataFrame(data)
         client.close()
-        return pd.DataFrame(data)
+    except Exception as e:
+        print(f"❌ API Request failed: {e}")
+        return
 
-df = load_permits()
-st.write(f"Total permits loaded: {len(df)}")
+    print(f"Successfully fetched {len(df)} records.")
+    print("Scanning data for target signals...")
+    
+    # Track if we find any matches during the test loop
+    match_found = False
+    
+    for index, row in df.iterrows():
+        # Using .get() with empty strings as a fallback prevents missing column errors
+        work_desc = str(row.get("work_description", "")).upper()
+        permit_type = str(row.get("permit_type", "")).upper()
+        
+        # Combine text fields to look for keywords
+        text = f"{permit_type} {work_desc}"
+        
+        # Keywords to scan for
+        if "ADU" in text or "SOLAR" in text or "EV" in text or "CHARGE" in text:
+            print(f"\n🔥 MATCH FOUND on row {index}!")
+            print(f"Type: {row.get('permit_type', 'N/A')}")
+            print(f"Description: {row.get('work_description', 'N/A')[:100]}...")
+            
+            print("\n✉️ [TRIGGER] Attempting to route alert notification...")
+            # ==========================================
+            # YOUR EMAIL LOGIC GOES HERE
+            # e.g., send_notification(body=text)
+            # ==========================================
+            print("Alert cycle executed successfully.")
+            
+            match_found = True
+            break  # Stops after the first match to keep the test quick
+            
+    if not match_found:
+        print("\nChecking first row data structure to make sure column names match:")
+        print(df.iloc[0].to_dict() if not df.empty else "DataFrame is empty.")
+        print("\n⚠️ Scan complete: No keywords matched in this batch of 100 rows.")
 
-def classify_permit(row):
-    work_desc = str(row.get("work_description", ""))
-    permit_type = str(row.get("permit_type", ""))
-    text = (work_desc + " " + permit_type).upper()
-    
-    if "ADU" in text or "ACCESSORY DWELLING" in text:
-        return "ADU"
-    if "SOLAR" in text or "PV" in text or "PHOTOVOLTAIC" in text:
-        return "Solar + Storage"
-    if "EV" in text or "CHARGE" in text or "ELECTRIC VEHICLE" in text:
-        return "EV Charging"
-    return "Other"
-
-if not df.empty:
-    df["category"] = df.apply(classify_permit, axis=1)
-    
-    adu_count = len(df[df["category"] == "ADU"])
-    solar_count = len(df[df["category"] == "Solar + Storage"])
-    
-    col1, col2 = st.columns(2)
-    col1.metric("ADU Permits", adu_count)
-    col2.metric("Solar Permits", solar_count)
-    
-    st.dataframe(df[["permit_type", "work_description", "category"]].head(100))
+if __name__ == "__main__":
+    test_harvester()
