@@ -5,7 +5,10 @@ from sodapy import Socrata
 
 print("Initializing Socrata client for data.lacity.org...")
 client = Socrata("data.lacity.org", None)
-dataset_id = "6ffd-by7r" 
+
+# Update to the main master endpoint for LA Building & Safety permits
+dataset_id = "yv23-pmwf" 
+print(f"Fetching latest records from dataset: {dataset_id}...")
 
 try:
     print(f"Fetching latest records from dataset: {dataset_id}...")
