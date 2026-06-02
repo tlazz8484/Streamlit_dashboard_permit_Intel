@@ -17,7 +17,6 @@ def load_permits():
 df = load_permits()
 st.write(f"Total permits loaded: {len(df)}")
 
-# Classify permits
 def classify_permit(row):
     work_desc = str(row.get("work_description", ""))
     permit_type = str(row.get("permit_type", ""))
@@ -34,7 +33,6 @@ def classify_permit(row):
 if not df.empty:
     df["category"] = df.apply(classify_permit, axis=1)
     
-    # Counts
     adu_count = len(df[df["category"] == "ADU"])
     solar_count = len(df[df["category"] == "Solar + Storage"])
     
@@ -42,5 +40,4 @@ if not df.empty:
     col1.metric("ADU Permits", adu_count)
     col2.metric("Solar Permits", solar_count)
     
-    # Show data
     st.dataframe(df[["permit_type", "work_description", "category"]].head(100))
