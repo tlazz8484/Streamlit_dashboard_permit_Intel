@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: write
     steps:
       - uses: actions/checkout@v4
       
@@ -30,11 +29,20 @@ jobs:
       - name: Keyword search and alerts
         run: python scripts/keyword_search.py
       
-      - name: Commit and push
-        run: |
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
-          git add data/
-          git diff --quiet && git diff --staged --quiet || git commit -m "Daily fetch $(date +'%Y-%m-%d')"
-          git pull --rebase origin main || true
-          git push --force-with-lease || git push
+      - name: Upload permits as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: permits_data_${{ github.run_id }}
+          path: data/permits/
+      
+      - name: Upload zoning as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zoning_data_${{ github.run_id }}
+          path: data/zoning/
+      
+      - name: Upload alerts as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alerts_data_${{ github.run_id }}
+          path: data/keywords_index/
