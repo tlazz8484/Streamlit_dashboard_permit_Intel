@@ -1,4 +1,4 @@
-name: Full Data Fetch
+name: Full Data Fetch (Permits + Zoning + Policy)
 
 on:
   schedule:
@@ -9,16 +9,27 @@ jobs:
   fetch-all:
     runs-on: ubuntu-latest
     permissions:
-      issues: write          # <-- ADD THIS LINE
+      issues: write
+      contents: write
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install sodapy pandas requests
-      - run: python scripts/fetch_permits.py
-      - run: python scripts/fetch_zoning.py
-      - run: python scripts/keyword_search.py
+      
+      - name: Install dependencies
+        run: pip install sodapy pandas requests beautifulsoup4
+      
+      - name: Fetch permits
+        run: python scripts/fetch_permits.py
+      
+      - name: Fetch zoning
+        run: python scripts/fetch_zoning.py
+      
+      - name: Keyword search and alerts
+        run: python scripts/keyword_search.py
+      
       - name: Commit and push
         run: |
           git config user.email "action@github.com"
