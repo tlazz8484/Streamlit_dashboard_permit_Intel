@@ -1,56 +1,94 @@
-# dashboard.py
-import streamlit as st
-import pandas as pd
-import plotly.express as px
+import smtplib
+from email.mime.text import MIMEText
 
-st.set_page_config(
-    page_title="LA Building Permit Forecaster",
-    layout="wide"
-)
-
-st.title("LA Building Permit Forecaster")
-st.markdown("Daily automated monitoring of urban development tracking metrics across Los Angeles.")
+def send_tier1_alert(city_count, total_permits, status_dict, recipient_email):
+    """Send email alert after Tier 1 fetch completes"""
+    
+    # Get your Gmail credentials from Streamlit secrets
+    sender_email = st.secrets.get("EMAIL_SENDER", "")
+    sender_password = st.secrets.get("EMAIL_PASSWORD", "")
+    
+    if not sender_email or not recipient_email:
+        print("Email not configured - skipping")
+        return
+    
+    # Build email body
+    success_cities = [c for c, s in status_dict.items() if "✅" in s]
+    failed_cities = [c for c, s in status_dict.items() if "❌" in s]
+    
+    body = f"""
+    ✅ Tier 1 Permit Data Fetch Complete
+    
+    Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    Cities fetched: {city_count}
+    Total permits: {total_permits:,}
+    
+    Successful: {len(success_cities)} cities
+    {', '.join(success_cities) if success_cities else 'None'}
+    
+    Failed: {len(failed_cities)} cities
+    {', '.join(failed_cities) if failed_cities else 'None'}
+    
+    Download the data from your dashboard:
+    https://your-app.streamlit.app
+    """
+    
+    msg = MIMEText(body)
+    msg['Subject'] = f"✅ Tier 1 Permit Fetch Complete - {datetime.now().strftime('%Y-%m-%d')}"
+    msg['From'] = sender_email
+    msg['To'] = recipient_email
+    
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+        print("📧 Email alert sent")
+    except Exception as e:
+        print(f"⚠️ Email failed: {e}")
 
 @st.cache_data(ttl=3600)
-def load_cached_permits():
-    try:
-        # Reads the static CSV file updated daily by GitHub Actions
-        return pd.read_csv("data/permits.csv")
-    except FileNotFoundError:
-        st.error("⚠️ Data cache file not found at `data/permits.csv`.")
-        st.info("Please run your 'Daily Permit Fetch' GitHub Action to generate this data file.")
-        return pd.DataFrame()
-
-df = load_cached_permits()
-
-if not df.empty:
-    st.success(f"📈 Total active tracking records loaded from GitHub cache: {len(df):,}")
+def fetch_tier1_cities():
+    """Fetch all Tier 1 cities data with timeouts and email alert"""
     
-    # Calculate metrics from the pre-classified data
-    adu_count = len(df[df["category"] == "ADU"])
-    solar_count = len(df[df["category"] == "Solar + Storage"])
-    ev_count = len(df[df["category"] == "EV Charging"])
+    cities = {
+        "Santa Monica": {"domain": "data.santamonica.gov", "dataset": "6nbn-7d9i"},
+        "Long Beach": {"domain": "data.longbeach.gov", "dataset": "n8d9-x7f3"},
+        "Pasadena": {"domain": "data.cityofpasadena.net", "dataset": "x7n9-5p2q"},
+    }
     
-    # Layout KPI Blocks
-    m1, m2, m3 = st.columns(3)
-    m1.metric(label="ADU Permits", value=f"{adu_count:,}")
-    m2.metric(label="Solar + Storage Permits", value=f"{solar_count:,}")
-    m3.metric(label="EV Charging Stations", value=f"{ev_count:,}")
+    all_data = []
+    status = {}
     
-    st.divider()
+    for name, info in cities.items():
+        try:
+            client = Socrata(info["domain"], None, timeout=30)
+            data = client.get(info["dataset"], limit=10000)
+            client.close()
+            
+            if data and len(data) > 0:
+                df = pd.DataFrame(data)
+                df['source_city'] = name
+                df['fetch_date'] = datetime.now().strftime('%Y-%m-%d')
+                all_data.append(df)
+                status[name] = f"✅ {len(df):,} permits"
+            else:
+                status[name] = "⚠️ No data returned"
+                
+        except Exception as e:
+            status[name] = f"❌ Error: {str(e)[:50]}"
+            continue
     
-    # Visual Layout Split
-    col_chart, col_table = st.columns([1, 1])
+    # Send email alert (only if not in cache refresh)
+    if all_data and not st.session_state.get('alert_sent', False):
+        combined = pd.concat(all_data, ignore_index=True)
+        # Get recipient email from secrets
+        recipient = st.secrets.get("EMAIL_RECIPIENT", "")
+        if recipient:
+            send_tier1_alert(len(all_data), len(combined), status, recipient)
+            st.session_state['alert_sent'] = True
     
-    with col_chart:
-        st.subheader("Permit Category Distribution")
-        category_counts = df["category"].value_counts().reset_index()
-        category_counts.columns = ["Category", "Count"]
-        fig = px.pie(category_counts, values="Count", names="Category", hole=0.4)
-        st.plotly_chart(fig, use_container_width=True)
-        
-    with col_table:
-        st.subheader("Recent Permit Logs Preview")
-        st.dataframe(df[["permit_type", "work_description", "category"]].head(100), use_container_width=True)
-else:
-    st.warning("Dashboard visualization components are offline until a valid dataset source is provided.")
+    if all_data:
+        combined = pd.concat(all_data, ignore_index=True)
+        return combined, status
+    return pd.DataFrame(), status
